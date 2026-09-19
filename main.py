@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
@@ -7,13 +8,18 @@ from aiogram.filters import CommandStart
 from aiogram.client.default import DefaultBotProperties
 import google.generativeai as genai
 
-from config import Config
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("DeviumGPT")
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+PORT = int(os.getenv("PORT", 8080))
+
+if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
+    raise RuntimeError("Ошибка: Переменные TELEGRAM_BOT_TOKEN или GEMINI_API_KEY не заданы на Render.")
 
 SYSTEM_INSTRUCTION = (
     "Вы — DeviumGPT, официальный интеллектуальный ассистент, разработанный технологическим агентством Devium Tech. "
@@ -35,16 +41,14 @@ async def setup_health_server(port: int) -> web.AppRunner:
     return runner
 
 async def main() -> None:
-    config = Config.from_env()
-
-    genai.configure(api_key=config.gemini_api_key)
+    genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
         system_instruction=SYSTEM_INSTRUCTION,
     )
 
     bot = Bot(
-        token=config.telegram_token,
+        token=TELEGRAM_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
     )
     dp = Dispatcher()
@@ -65,20 +69,17 @@ async def main() -> None:
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
         try:
-            # Вызов генерации в отдельном потоке для предотвращения блокировки Event Loop
             response = await asyncio.to_thread(model.generate_content, message.text)
-            
             if response.text:
                 await message.answer(response.text)
             else:
                 await message.answer("Запрос обработан, но ответ пуст. Попробуйте переформулировать.")
-
         except Exception as err:
             logger.error("Error processing request: %s", err, exc_info=True)
             await message.answer("⚠️ Не удалось обработать запрос. Попробуйте снова через некоторое время.")
 
-    health_runner = await setup_health_server(config.port)
-    logger.info("Health check endpoint listening on port %d", config.port)
+    health_runner = await setup_health_server(PORT)
+    logger.info("Health check endpoint listening on port %d", PORT)
 
     try:
         logger.info("Starting bot polling loop...")
