@@ -43,7 +43,7 @@ async def setup_health_server(port: int) -> web.AppRunner:
 async def main() -> None:
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-3.8-flash",
         system_instruction=SYSTEM_INSTRUCTION,
     )
 
